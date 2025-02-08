@@ -4,8 +4,10 @@ from transformers import BertTokenizer
 import nltk
 from nltk.corpus import brown
 import random
+import config
 
-nltk.download('brown')
+nltk.data.path.append(os.path.join(config.DATA_DIR, 'nltk_data'))
+nltk.download('brown', download_dir=os.path.join(config.DATA_DIR, 'nltk_data'))
 
 class NLTKDataset(Dataset):
     def __init__(self, sentences, tokenizer, max_length):
