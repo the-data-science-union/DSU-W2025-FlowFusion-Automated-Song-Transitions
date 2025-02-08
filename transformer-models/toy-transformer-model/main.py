@@ -12,7 +12,7 @@ def main():
     trainer = BERTTrainer(model, config.VOCAB_SIZE, config.MAX_LENGTH, config.LEARNING_RATE, config.WARMUP_STEPS)
 
     trainer.train(dataloader, config.NUM_EPOCHS)
-    trainer.save_model("bert_model.pth")
+    trainer.save_model(os.path.join(config.OUTPUT_DIR, "bert_model.pth"))
 
 if __name__ == "__main__":
     main()

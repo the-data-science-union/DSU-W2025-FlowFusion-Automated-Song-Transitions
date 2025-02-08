@@ -1,4 +1,16 @@
 import torch
+import os
+
+BASE_DIR = '/server/aditya'
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
+
+# Ensure these directories exist
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Other config parameters...
+TRAIN_FILE = os.path.join(DATA_DIR, 'corpus.txt')
 
 # Model Architecture
 VOCAB_SIZE = 30522  # Default for BERT-base
