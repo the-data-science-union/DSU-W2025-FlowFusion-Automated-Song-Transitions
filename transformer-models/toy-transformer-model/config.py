@@ -1,7 +1,7 @@
 import torch
 import os
 
-BASE_DIR = '/server/aditya'
+BASE_DIR = '/scratch/aditya'
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 
@@ -36,7 +36,6 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Logging and Saving
 LOG_INTERVAL = 100
 SAVE_INTERVAL = 1000  # Reduced from 10000 to 1000 due to smaller dataset
-OUTPUT_DIR = './output'
 
 # Optimizer
 ADAM_EPSILON = 1e-8

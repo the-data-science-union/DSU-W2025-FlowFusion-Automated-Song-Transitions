@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from attention import MultiHeadAttention
+from .attention import MultiHeadAttention
 import math
 
 class EncoderLayer(nn.Module):
@@ -39,14 +39,9 @@ class Encoder(nn.Module):
         pos_encoding[:, 0::2] = torch.sin(position * div_term)
         pos_encoding[:, 1::2] = torch.cos(position * div_term)
         return pos_encoding.unsqueeze(0)
-        
+
     def forward(self, x, mask):
-        seq_length = x.size(1)
-        x = self.embed(x) * math.sqrt(self.d_model)
-        x += self.pos_encoding[:, :seq_length, :]
         x = self.dropout(x)
-        
         for layer in self.layers:
-            x = layer(x, mask)
-        
+            x = layer(x, mask) + x
         return x
