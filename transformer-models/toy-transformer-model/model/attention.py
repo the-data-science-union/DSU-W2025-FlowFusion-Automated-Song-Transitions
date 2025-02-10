@@ -20,11 +20,18 @@ class MultiHeadAttention(nn.Module):
         
     def scaled_dot_product_attention(self, Q, K, V, mask=None):
         attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
+        
         if mask is not None:
+            # Reshape mask to match attn_scores dimensions
+            mask = mask.unsqueeze(1).unsqueeze(2)  # Shape becomes (32, 1, 1, 15)
+            mask = mask.expand_as(attn_scores)     # Expand to (32, 12, 15, 15)
+            
             attn_scores = attn_scores.masked_fill(mask == 0, -1e9)
-        attn_probs = F.softmax(attn_scores, dim=-1)
+        
+        attn_probs = torch.softmax(attn_scores, dim=-1)
         output = torch.matmul(attn_probs, V)
-        return output
+        
+        return output, attn_probs
         
     def split_heads(self, x):
         batch_size, seq_length, d_model = x.size()
@@ -38,7 +45,6 @@ class MultiHeadAttention(nn.Module):
         Q = self.split_heads(self.W_q(Q))
         K = self.split_heads(self.W_k(K))
         V = self.split_heads(self.W_v(V))
-        
         attn_output = self.scaled_dot_product_attention(Q, K, V, mask)
-        output = self.W_o(self.combine_heads(attn_output))
+        output = self.W_o(self.combine_heads(attn_output[0]))
         return output
