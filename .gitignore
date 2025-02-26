@@ -2,3 +2,11 @@ transformer-models/toy-transformer-model/__pycache__/
 transformer-models/toy-transformer-model/model/__pycache__/
 transformer-models/toy-transformer-model/output/
 transformer-models/toy-transformer-model/utils/__pycache__/
+data/__pycache__
+raw-wavs/
+processed-tokens/
+mamba_models/__pycache__
+mamba_models/mamba-plus.py
+mamba_models/bidrectional_mamba.py
+.cache
+.env
