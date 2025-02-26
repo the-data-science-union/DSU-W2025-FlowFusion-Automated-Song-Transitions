@@ -2,3 +2,4 @@ transformer-models/toy-transformer-model/__pycache__/
 transformer-models/toy-transformer-model/model/__pycache__/
 transformer-models/toy-transformer-model/output/
 transformer-models/toy-transformer-model/utils/__pycache__/
+.env
