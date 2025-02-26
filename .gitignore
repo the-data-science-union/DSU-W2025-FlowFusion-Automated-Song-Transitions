@@ -7,7 +7,7 @@ raw-wavs/
 processed-tokens/
 mamba_models/__pycache__
 mamba_models/mamba-plus.py
-mamba_models/bidrectional_mamba.py
+mamba_models/bidirectional_mamba.py
 .cache
 .env
 .DS_Store
