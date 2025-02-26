@@ -1,0 +1,4 @@
+#Mamba Hyperparams
+MAMBA_D_STATE=16
+MAMBA_D_CONV = 4
+MAMBA_EXPAND = 2
