@@ -58,5 +58,5 @@ def visualize_sample(masked_interval, original_mask, sample_rate):
     plt.show()
 
 if __name__ == "__main__":
-    file_path = "/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/processed-tokens/"
+    file_path = "/Users/tiyachokhani/Documents/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/processed-tokens"
     test_music_dataset(file_path)
