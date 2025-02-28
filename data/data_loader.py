@@ -27,6 +27,7 @@ class MusicDataset(Dataset):
                     raise ValueError(f"File {file} did not load as a tensor. Got {type(tensor)}")
 
                 tensor = tensor.squeeze(0).transpose(0, 1)  # (1, 4, T) → (T, 4)
+                print("data loader tensor shape: ", tensor.shape)
                 data_files.append(tensor)
                 print(f"Loaded {file}, shape: {tensor.shape}")
 
@@ -64,7 +65,6 @@ class MusicDataset(Dataset):
         raise ValueError(f"Sample index {sample_idx} out of range!")
 
     def __getitem__(self, idx):
-
         try:
             """Maps dataset index to the correct track & sample location"""
             sample_offset = idx * self.sample_rate
@@ -74,8 +74,11 @@ class MusicDataset(Dataset):
             track_data = self.data_files[track_idx]
             end = local_idx + self.interval_length
 
-            if end > track_data.shape[0]:  # Avoid out-of-bounds slicing
-                raise IndexError(f"Interval exceeds track length for index {idx}")
+            # Check if the interval exceeds the track length, and adjust accordingly
+            if end > track_data.shape[0]:  # If the interval exceeds, reduce the length
+                # Adjust local_idx to ensure the interval fits
+                local_idx = track_data.shape[0] - self.interval_length
+                end = track_data.shape[0]
 
             interval = track_data[local_idx:end]
 
@@ -89,8 +92,21 @@ class MusicDataset(Dataset):
 
         except IndexError as e:
             print(f"[ERROR] Index {idx} out of bounds!")
-            print(f"Track Length: {self.track_lengths[idx] if idx < len(self.track_lengths) else 'N/A'}")
-            print(f"Dataset Length: {len(self.track_lengths)}")
+            
+            # Get track information safely
+            if self.track_ranges:
+                total_tracks = len(self.track_ranges)
+                track_lengths = [end - start for start, end in self.track_ranges]  # Compute lengths
+
+                print(f"Total Tracks: {total_tracks}")
+                print(f"Dataset Length: {sum(track_lengths)} samples")
+                
+                if idx < total_tracks:
+                    print(f"Track {idx} Length: {track_lengths[idx]}")
+                else:
+                    print("Requested index exceeds available tracks.")
+
             raise e  # Re-raise the exception after logging
 
         return masked_interval, interval[mask_start:mask_end]
+
