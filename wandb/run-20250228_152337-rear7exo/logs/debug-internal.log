@@ -1,0 +1,7 @@
+{"time":"2025-02-28T15:23:37.454025453Z","level":"INFO","msg":"stream: starting","core version":"0.19.7","symlink path":"/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/wandb/run-20250228_152337-rear7exo/logs/debug-core.log"}
+{"time":"2025-02-28T15:23:37.570728833Z","level":"INFO","msg":"created new stream","id":"rear7exo"}
+{"time":"2025-02-28T15:23:37.570770113Z","level":"INFO","msg":"stream: started","id":"rear7exo"}
+{"time":"2025-02-28T15:23:37.570823853Z","level":"INFO","msg":"writer: Do: started","stream_id":"rear7exo"}
+{"time":"2025-02-28T15:23:37.570958652Z","level":"INFO","msg":"sender: started","stream_id":"rear7exo"}
+{"time":"2025-02-28T15:23:37.570861833Z","level":"INFO","msg":"handler: started","stream_id":"rear7exo"}
+{"time":"2025-02-28T15:23:37.808395046Z","level":"INFO","msg":"Starting system monitor"}
