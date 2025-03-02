@@ -6,7 +6,8 @@ data/__pycache__
 raw-wavs/
 processed-tokens/
 mamba_models/__pycache__
-mamba_models/mamba-plus.py
-mamba_models/bidrectional_mamba.py
+mamba_models/attention/__pycache__
 .cache
 .env
+data/data-processing/old_tokens
+bidirectional_mamba_epoch_*.pt

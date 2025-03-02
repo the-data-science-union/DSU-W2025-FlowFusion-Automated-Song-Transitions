@@ -43,7 +43,6 @@ class Encoder(nn.Module):
     def forward(self, x, mask):
         #do we need to modify to make x = self.embed x?
         x = self.embed(x)
-        print("shape of x:", x.shape)
         x = self.dropout(x)
         for layer in self.layers:
             x = layer(x, mask) + x

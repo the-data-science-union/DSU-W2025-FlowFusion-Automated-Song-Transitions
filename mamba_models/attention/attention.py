@@ -16,7 +16,7 @@ class MultiHeadAttention(nn.Module):
         self.W_q = nn.Linear(d_model, d_model)
         self.W_k = nn.Linear(d_model, d_model)
         self.W_v = nn.Linear(d_model, d_model)
-        self.W_o = nn.Linear(d_model, d_model)
+        self.W_o = nn.Linear(num_heads * self.d_k, self.d_model)  # Fix dimensions
         
     def scaled_dot_product_attention(self, Q, K, V, mask=None):
         attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
@@ -34,23 +34,34 @@ class MultiHeadAttention(nn.Module):
         return output, attn_probs
         
     def split_heads(self, x):
-        batch_size, seq_length, d_model = x.shape
-        assert d_model % self.num_heads == 0, "d_model must be divisible by num_heads!"
-        
-        d_k = d_model // self.num_heads  # Compute the correct head size
-        x = x.view(batch_size, seq_length, self.num_heads, d_k)  # Reshape correctly
-        x = x.permute(0, 2, 1, 3)  # Rearrange to (B, num_heads, seq_len, d_k)
-    
+        """Split input into multiple attention heads for each channel independently"""
+        batch_size, seq_length, num_channels, d_model = x.shape
+
+        # Split the input into multiple heads along the d_model dimension
+        head_dim = d_model // self.num_heads  # Ensure d_model is divisible by num_heads
+        assert d_model % self.num_heads == 0, f"d_model must be divisible by num_heads"
+
+        x = x.view(batch_size, seq_length, num_channels, self.num_heads, head_dim)  # (B, S, C, H, D_head)
+        x = x.permute(0, 3, 1, 2, 4)  # (B, H, S, C, D_head)
         return x
 
+
     def combine_heads(self, x):
-        batch_size, _, seq_length, d_k = x.size()
-        return x.transpose(1, 2).contiguous().view(batch_size, seq_length, self.d_model)
+        batch_size, num_heads, seq_length, num_channels, d_k = x.size()
+        x = x.permute(0, 2, 3, 1, 4).contiguous()  # (B, S, C, H, D_head)
+        x = x.view(batch_size, seq_length, num_channels, num_heads * d_k)  # (B, S, C, D)
+        return x
+
         
     def forward(self, Q, K, V, mask=None):
         Q = self.split_heads(self.W_q(Q))
         K = self.split_heads(self.W_k(K))
         V = self.split_heads(self.W_v(V))
-        attn_output = self.scaled_dot_product_attention(Q, K, V, mask)
-        output = self.W_o(self.combine_heads(attn_output[0]))
+        
+        attn_output, _ = self.scaled_dot_product_attention(Q, K, V, mask)
+
+        combined_output = self.combine_heads(attn_output)
+        output = self.W_o(combined_output)
+
         return output
+

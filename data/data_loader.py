@@ -27,6 +27,7 @@ class MusicDataset(Dataset):
                     raise ValueError(f"File {file} did not load as a tensor. Got {type(tensor)}")
 
                 tensor = tensor.squeeze(0).transpose(0, 1)  # (1, 4, T) → (T, 4)
+                print("data loader tensor shape: ", tensor.shape)
                 data_files.append(tensor)
                 print(f"Loaded {file}, shape: {tensor.shape}")
 
@@ -63,21 +64,26 @@ class MusicDataset(Dataset):
                 return track_idx, sample_idx - start
         raise ValueError(f"Sample index {sample_idx} out of range!")
 
-    def __getitem__(self, idx):
+    import torch
 
+    def __getitem__(self, idx):
         try:
             """Maps dataset index to the correct track & sample location"""
             sample_offset = idx * self.sample_rate
 
             track_idx, local_idx = self.get_track_index(sample_offset)
-
             track_data = self.data_files[track_idx]
             end = local_idx + self.interval_length
 
-            if end > track_data.shape[0]:  # Avoid out-of-bounds slicing
-                raise IndexError(f"Interval exceeds track length for index {idx}")
+            # Ensure the interval does not exceed track length
+            if end > track_data.shape[0]:  
+                local_idx = track_data.shape[0] - self.interval_length
+                end = track_data.shape[0]
 
-            interval = track_data[local_idx:end]
+            interval = track_data[local_idx:end]  # Keep original dtype (likely `torch.long`)
+            
+            # Convert only for numerical calculations
+            interval_float = interval.float()
 
             # Calculate mask region
             mask_start = (self.interval_length - self.mask_length) // 2
@@ -85,12 +91,48 @@ class MusicDataset(Dataset):
 
             # Create the masked interval
             masked_interval = interval.clone()
-            masked_interval[mask_start:mask_end] = 0  # Assuming 0 is the mask token
+
+            # Apply denoising strategy (adjusted)
+            noise_type = "shuffle"  # Use "shuffle" for categorical data
+
+            if noise_type == "gaussian":
+                noise = torch.normal(mean=interval_float.mean(), std=interval_float.std(), 
+                                    size=(self.mask_length, interval.shape[1])).to(interval.device)
+            elif noise_type == "uniform":
+                noise = (torch.rand(self.mask_length, interval.shape[1]) * 
+                        (interval_float.max() - interval_float.min()) + interval_float.min()).to(interval.device)
+            elif noise_type == "shuffle":
+                indices = torch.randperm(interval.shape[0])[:self.mask_length]
+                noise = interval[indices]  # Shuffle from sequence
+            elif noise_type == "mean":
+                mean_value = interval_float.mean(dim=0, keepdim=True)
+                noise = mean_value.repeat(self.mask_length, 1).to(interval.device)
+
+            # Ensure dtype consistency
+            if interval.dtype in [torch.int, torch.long]:
+                noise = noise.round().clamp(interval.min(), interval.max()).to(interval.dtype)
+
+            masked_interval[mask_start:mask_end] = noise
+
+            return masked_interval, interval[mask_start:mask_end]
 
         except IndexError as e:
             print(f"[ERROR] Index {idx} out of bounds!")
-            print(f"Track Length: {self.track_lengths[idx] if idx < len(self.track_lengths) else 'N/A'}")
-            print(f"Dataset Length: {len(self.track_lengths)}")
+            
+            # Get track information safely
+            if self.track_ranges:
+                total_tracks = len(self.track_ranges)
+                track_lengths = [end - start for start, end in self.track_ranges]  # Compute lengths
+
+                print(f"Total Tracks: {total_tracks}")
+                print(f"Dataset Length: {sum(track_lengths)} samples")
+                
+                if idx < total_tracks:
+                    print(f"Track {idx} Length: {track_lengths[idx]}")
+                else:
+                    print("Requested index exceeds available tracks.")
+
             raise e  # Re-raise the exception after logging
 
         return masked_interval, interval[mask_start:mask_end]
+

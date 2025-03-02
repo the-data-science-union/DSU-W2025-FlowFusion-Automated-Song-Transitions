@@ -19,5 +19,5 @@ class AddNorm(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, x, sublayer):
-        return self.norm(x + self.dropout(sublayer(x)))
+        return self.norm(x + self.dropout(sublayer))
 
