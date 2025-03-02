@@ -9,5 +9,10 @@ class BERTEmbedding(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, input_ids, segment_ids=None):
+        token_embeddings = self.token_embed(input_ids)
+        
+        channel_embeddings = self.channel_embed(segment_ids)
+        
+        embeddings = token_embeddings + channel_embeddings
 
-        return self.token_embed(input_ids)
+        return embeddings

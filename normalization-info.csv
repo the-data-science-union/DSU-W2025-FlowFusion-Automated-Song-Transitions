@@ -1,0 +1,16 @@
+id,mean,std
+/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/raw-wavs/Don't_Stop_The_Music_-_Rihanna.wav.wav,"[503.2041320800781, 503.7024230957031, 491.2384033203125, 511.6903076171875]","[298.27569580078125, 285.0885009765625, 300.1052551269531, 303.5164794921875]"
+/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/raw-wavs/Don't_Stop_The_Music_-_Rihanna.wav.wav,"tensor([[503.2041],
+        [503.7024],
+        [491.2384],
+        [511.6903]])","tensor([[298.2757],
+        [285.0885],
+        [300.1053],
+        [303.5165]])"
+/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/raw-wavs/Don't_Stop_The_Music_-_Rihanna.wav.wav,"tensor([[503.2041],
+        [503.7024],
+        [491.2384],
+        [511.6903]])","tensor([[298.2757],
+        [285.0885],
+        [300.1053],
+        [303.5165]])"

@@ -35,23 +35,27 @@ class MultiHeadAttention(nn.Module):
         
     def split_heads(self, x):
         """Split input into multiple attention heads for each channel independently"""
-        batch_size, seq_length, num_channels, d_model = x.shape
+        batch_size, seq_length, num_channels = x.shape
 
-        # Split the input into multiple heads along the d_model dimension
-        head_dim = d_model // self.num_heads  # Ensure d_model is divisible by num_heads
-        assert d_model % self.num_heads == 0, f"d_model must be divisible by num_heads"
+        # Ensure num_channels is divisible by num_heads
+        head_dim = num_channels // self.num_heads
+        assert num_channels % self.num_heads == 0, "num_channels must be divisible by num_heads"
+        x = x.view(batch_size, seq_length, self.num_heads, head_dim)  # (B, S, H, D_head)
 
-        x = x.view(batch_size, seq_length, num_channels, self.num_heads, head_dim)  # (B, S, C, H, D_head)
-        x = x.permute(0, 3, 1, 2, 4)  # (B, H, S, C, D_head)
+        x = x.permute(0, 2, 1, 3)  # (B, H, S, D_head)
+
         return x
 
 
     def combine_heads(self, x):
-        batch_size, num_heads, seq_length, num_channels, d_k = x.size()
-        x = x.permute(0, 2, 3, 1, 4).contiguous()  # (B, S, C, H, D_head)
-        x = x.view(batch_size, seq_length, num_channels, num_heads * d_k)  # (B, S, C, D)
-        return x
+        """Combine multiple attention heads back into a single tensor."""
 
+        batch_size, num_heads, seq_length, head_dim = x.shape #should be B, 4, seqL, #
+
+        x = x.permute(0, 2, 1, 3).contiguous()  # (B, S, H, D_head)
+        x = x.view(batch_size, seq_length, num_heads * head_dim)  # (B, S, D)
+
+        return x
         
     def forward(self, Q, K, V, mask=None):
         Q = self.split_heads(self.W_q(Q))

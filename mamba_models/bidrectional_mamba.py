@@ -20,15 +20,9 @@ class BidirectionalMambaBlock(nn.Module):
         self.feedforward = FeedForward(d_model, d_ff, dropout)
 
     def forward(self, x):
-        B, W, C, D = x.shape  # Expected input shape: (B, W, C, D)
-
-        # Ensure correct feature dimension for Mamba
-        flattened_dim = C * D
-        x = x.view(B, W, flattened_dim)  # Shape: (B, W, C * D)
         forward_dir = x
         backward_dir = torch.flip(x, dims=[1])  # Flip along sequence length
         
-
         forward_dir = self.fmamba(forward_dir)  # Pass flattened input to Mamba
         backward_dir = self.bmamba(backward_dir)
 
@@ -42,8 +36,6 @@ class BidirectionalMambaBlock(nn.Module):
         out = self.feedforward(out)
         out = self.an3(out, out)
 
-        # Reshape back to (B, W, C, D)
-        out = out.view(B, W, C, D)
         return out
 
 
@@ -53,17 +45,18 @@ class BidirectionalMamba(nn.Module):
         super(BidirectionalMamba, self).__init__()
         self.encoder = Encoder(vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout)
         self.layers = nn.ModuleList([
-            BidirectionalMambaBlock(d_model * num_heads, d_ff, dropout) for _ in range(num_layers)
+            BidirectionalMambaBlock(d_model, d_ff, dropout) for _ in range(num_layers)
         ])
-        self.norm = nn.LayerNorm(d_model * num_heads)  # Adjusted to match new feature size
+        self.linear = nn.Linear(d_model, 4)
+        self.norm = nn.LayerNorm(4)
 
     def forward(self, input_ids, attention_mask=None):
-        # input_ids: (B, W)
-        x = self.encoder(input_ids, attention_mask)  # Output shape: (B, W, C, D)
+
+        x = self.encoder(input_ids, attention_mask)
 
         for layer in self.layers:
             x = layer(x)
+        x = self.linear(x)
+        x = self.norm(x)
 
-        x = self.norm(x.view(x.shape[0], x.shape[1], -1))  # Apply normalization after flattening
-
-        return x.view(x.shape[0], x.shape[1], x.shape[2], -1)  # Reshape back to (B, W, C, D)
+        return x

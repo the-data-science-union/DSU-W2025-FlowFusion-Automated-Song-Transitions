@@ -14,10 +14,11 @@ def main(input_file):
 
     with torch.no_grad():
         encoded_frames = model.encode(wav)
-    codes = torch.cat([encoded[0] for encoded in encoded_frames], dim=-1)  # [B, n_q, T]
+    codes = (torch.cat([encoded[0] for encoded in encoded_frames], dim=-1)).float()  # [B, n_q, T]
     
-    # Apply L2 normalization across the codes
-    codes = torch.nn.functional.normalize(codes, p=2, dim=-1)
+    mean = codes.mean(dim=-1, keepdim=True).float()
+    std = codes.std(dim=-1, keepdim=True).float()
+    codes = ((codes - mean) / (2*(std + 1e-6)))
     
     output_file = "data/processed-tokens/" + input_file.split("/")[-1].split(".")[0] + "_encoded_codes.pt"
     torch.save(codes, output_file)
