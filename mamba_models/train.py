@@ -1,4 +1,3 @@
-import wandb
 import os
 import torch
 import torch.nn as nn
@@ -11,13 +10,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-WANDB_ENTITY = os.getenv("WANDB_ENTITY")
-
 # Define Training Parameters
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPOCHS = 50
-BATCH_SIZE = 4
-LEARNING_RATE = 1e-6
+BATCH_SIZE = 8
+LEARNING_RATE = 1e-4
 INTERVAL_LENGTH = 32
 MASK_LENGTH = 2
 SAMPLE_RATE = 50
@@ -32,7 +29,7 @@ VOCAB_SIZE = 32759  # Update if different
 D_MODEL = 256
 NUM_LAYERS = 10
 NUM_HEADS = 4
-D_FF = 2048
+D_FF = 1024
 MAX_SEQ_LENGTH = 1600  # Adjust based on data
 
 model = BidirectionalMamba(
@@ -47,22 +44,6 @@ model = BidirectionalMamba(
 # Loss function and optimizer
 criterion = nn.MSELoss()
 optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
-
-# Initialize Wandb
-wandb.init(project="dsu-ai-dj-model-training", entity=WANDB_ENTITY)  # Replace with your Wandb project name
-
-# Log hyperparameters
-wandb.config.update({
-    "epochs": EPOCHS,
-    "batch_size": BATCH_SIZE,
-    "learning_rate": LEARNING_RATE,
-    "vocab_size": VOCAB_SIZE,
-    "d_model": D_MODEL,
-    "num_layers": NUM_LAYERS,
-    "num_heads": NUM_HEADS,
-    "d_ff": D_FF,
-    "max_seq_length": MAX_SEQ_LENGTH,
-})
 
 # Training Loop
 def train():
@@ -104,22 +85,15 @@ def train():
 
                 # Update the progress bar with the current loss
                 pbar.set_postfix(loss=loss.item())
-
-                # Log the loss to Wandb after each batch
-                wandb.log({"batch_loss": loss.item()})
         
         # Compute the average loss over all batches for the current epoch
         avg_loss = total_loss / len(dataloader)
         print(f"Epoch {epoch + 1}/{EPOCHS}, Loss: {avg_loss:.4f}")
 
-        # Log the average loss for the epoch to Wandb
-        wandb.log({"epoch_loss": avg_loss})
-
         # Save model checkpoint every 5 epochs
         if (epoch + 1) % 5 == 0:
             checkpoint_path = f"bidirectional_mamba_epoch_{epoch+1}.pt"
             torch.save(model.state_dict(), checkpoint_path)
-            wandb.save(checkpoint_path)  # Save the model to Wandb for tracking
 
 if __name__ == "__main__":
     train()
