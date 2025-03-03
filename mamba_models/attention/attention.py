@@ -9,6 +9,8 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = num_heads
         self.d_model = d_model
         
+        if (d_model % num_heads):
+            print("d_model and num_heads: ", d_model, num_heads)
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
         
         self.d_k = d_model // num_heads

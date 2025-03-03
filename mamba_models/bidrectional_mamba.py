@@ -5,6 +5,7 @@ from mamba_models.config import *
 from mamba_models.layers import *
 from mamba_models.attention.encoder import Encoder
 
+
 class BidirectionalMambaBlock(nn.Module):
     def __init__(self, d_model, d_ff, dropout=0.1):
         super(BidirectionalMambaBlock, self).__init__()
@@ -18,13 +19,20 @@ class BidirectionalMambaBlock(nn.Module):
         self.an3 = AddNorm(d_model, dropout)
 
         self.feedforward = FeedForward(d_model, d_ff, dropout)
+        
+        self.bn1 = nn.BatchNorm1d(d_model)  # BatchNorm after fmamba
+        self.bn2 = nn.BatchNorm1d(d_model)  # BatchNorm after bmamba
+        self.bn3 = nn.BatchNorm1d(d_model)  # BatchNorm after feedforward
 
     def forward(self, x):
         forward_dir = x
         backward_dir = torch.flip(x, dims=[1])  # Flip along sequence length
         
         forward_dir = self.fmamba(forward_dir)  # Pass flattened input to Mamba
+        forward_dir = self.bn1(forward_dir.transpose(1, 2)).transpose(1, 2)  # Apply BatchNorm
+
         backward_dir = self.bmamba(backward_dir)
+        backward_dir = self.bn2(backward_dir.transpose(1, 2)).transpose(1, 2)  # Apply BatchNorm
 
         backward_dir = torch.flip(backward_dir, dims=[1])  # Flip back
 
@@ -34,7 +42,8 @@ class BidirectionalMambaBlock(nn.Module):
 
         out = forward_dir + backward_dir
         out = self.feedforward(out)
-        out = self.an3(out, out)
+        out = self.bn3(out.transpose(1, 2)).transpose(1, 2)  # Apply BatchNorm
+        out += x
 
         return out
 
@@ -48,15 +57,12 @@ class BidirectionalMamba(nn.Module):
             BidirectionalMambaBlock(d_model, d_ff, dropout) for _ in range(num_layers)
         ])
         self.linear = nn.Linear(d_model, 4)
-        self.norm = nn.LayerNorm(4)
 
     def forward(self, input_ids, attention_mask=None):
 
         x = self.encoder(input_ids, attention_mask)
-
         for layer in self.layers:
             x = layer(x)
         x = self.linear(x)
-        x = self.norm(x)
 
         return x

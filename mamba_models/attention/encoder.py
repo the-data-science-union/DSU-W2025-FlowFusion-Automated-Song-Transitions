@@ -29,7 +29,7 @@ class Encoder(nn.Module):
         self.d_model = d_model
         self.embed = nn.Embedding(vocab_size, d_model)
         self.pos_encoding = self.positional_encoding(max_seq_length, d_model)
-        self.input_processing = EncoderLayer(4, num_heads, d_ff, dropout)
+        #self.input_processing = EncoderLayer(4, num_heads, d_ff, dropout)
         self.channel_expansion = nn.Linear(4, d_model)
         self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)])
         self.dropout = nn.Dropout(dropout)
@@ -44,9 +44,8 @@ class Encoder(nn.Module):
 
     def forward(self, x, mask):
         #do we need to modify to make x = self.embed x?
-        x = self.input_processing(x, mask)
-        x = self.dropout(x)
         x = self.channel_expansion(x)
+        x = self.dropout(x)
         for layer in self.layers:
             x = layer(x, mask) + x
         return x
