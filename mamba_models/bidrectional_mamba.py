@@ -50,19 +50,22 @@ class BidirectionalMambaBlock(nn.Module):
 
 
 class BidirectionalMamba(nn.Module):
-    def __init__(self, vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout=0.1):
+    def __init__(self, vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout=0.1, device="cuda"):
         super(BidirectionalMamba, self).__init__()
-        self.encoder = Encoder(vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout)
+        self.d_model=d_model
+        self.device = device
+        self.encoder = Encoder(vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout, device=self.device)
         self.layers = nn.ModuleList([
             BidirectionalMambaBlock(d_model, d_ff, dropout) for _ in range(num_layers)
         ])
-        self.linear = nn.Linear(d_model, 4)
+        self.final = nn.Linear(d_model, vocab_size)
 
     def forward(self, input_ids, attention_mask=None):
-
+        B, S, C = input_ids.shape
         x = self.encoder(input_ids, attention_mask)
         for layer in self.layers:
             x = layer(x)
-        x = self.linear(x)
+        x = x.view(B, S, C, self.d_model)
+        x = self.final(x)
 
         return x

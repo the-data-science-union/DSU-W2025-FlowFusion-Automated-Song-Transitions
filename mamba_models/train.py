@@ -1,5 +1,6 @@
 import os
 import torch
+import wandb
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -9,50 +10,54 @@ from tqdm import tqdm
 from dotenv import load_dotenv
 import numpy as np
 import matplotlib.pyplot as plt
-import wandb
 import sys
 import random
 
 load_dotenv()
 
-# Initialize Weights & Biases
-wandb.init(project="bidirectional_mamba_music", config={
-    "epochs": 100,
-    "batch_size": 8,
-    "learning_rate": 1e-4,
-    "interval_length": 32,
-    "mask_length": 2,
-    "sample_rate": 50,
-    "d_model": 512,
-    "num_layers": 8,
-    "num_heads": 16,
-    "d_ff": 1024,
-    "max_seq_length": 1600,
-    "dropout": 0.3
-})
-
 # Define Training Parameters
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-EPOCHS = wandb.config.epochs
-BATCH_SIZE = wandb.config.batch_size
-LEARNING_RATE = wandb.config.learning_rate
-INTERVAL_LENGTH = wandb.config.interval_length
-MASK_LENGTH = wandb.config.mask_length
-SAMPLE_RATE = wandb.config.sample_rate
+EPOCHS = 250
+BATCH_SIZE = 1
+LEARNING_RATE = 1e-4
+INTERVAL_LENGTH = 32
+MASK_LENGTH = 2
+SAMPLE_RATE = 50
 FILE_PATH = "/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/processed-tokens/"
+
+# Normalization statistics
+MEANS = torch.tensor([[503.2041], [503.7024], [491.2384], [511.6903]]).to(DEVICE)
+STDS = torch.tensor([[298.2757], [285.0885], [300.1053], [303.5165]]).to(DEVICE)
+EPSILON = 1e-6
+VOCAB_SIZE = 1024
 
 # Initialize Dataset & DataLoader
 dataset = MusicDataset(FILE_PATH, INTERVAL_LENGTH, MASK_LENGTH, SAMPLE_RATE)
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 # Model Initialization
-VOCAB_SIZE = 10000
-D_MODEL = wandb.config.d_model
-NUM_LAYERS = wandb.config.num_layers
-NUM_HEADS = wandb.config.num_heads
-D_FF = wandb.config.d_ff
-MAX_SEQ_LENGTH = wandb.config.max_seq_length
-DROPOUT = wandb.config.dropout
+D_MODEL = 512
+NUM_LAYERS = 4
+NUM_HEADS = 16
+D_FF = 2048
+MAX_SEQ_LENGTH = 1600
+DROPOUT = 0.2
+
+# Initialize Weights & Biases
+wandb.init(project="bidirectional_mamba_music", config={
+    "epochs": EPOCHS,
+    "batch_size": BATCH_SIZE,
+    "learning_rate": LEARNING_RATE,
+    "interval_length": INTERVAL_LENGTH,
+    "mask_length": MASK_LENGTH,
+    "sample_rate": SAMPLE_RATE,
+    "d_model": D_MODEL,
+    "num_layers": NUM_LAYERS,
+    "num_heads": NUM_HEADS,
+    "d_ff": D_FF,
+    "max_seq_length": MAX_SEQ_LENGTH,
+    "dropout": DROPOUT
+})
 
 model = BidirectionalMamba(
     vocab_size=VOCAB_SIZE, 
@@ -61,28 +66,46 @@ model = BidirectionalMamba(
     num_heads=NUM_HEADS, 
     d_ff=D_FF, 
     max_seq_length=MAX_SEQ_LENGTH,
-    dropout=DROPOUT
+    dropout=DROPOUT,
+    device=DEVICE
 ).to(DEVICE)
 
 # Loss function, optimizer, and scheduler
-criterion = nn.MSELoss()
+criterion = nn.CrossEntropyLoss()
 optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
 
-# Function to save and log sample masks
+# Function to denormalize and convert to long
+def denormalize_and_to_long(tensor, means=MEANS, stds=STDS, vocab_size=VOCAB_SIZE, epsilon=EPSILON):
+    # Denormalize: normalized_value * (2 * std + epsilon) + mean
+    denormed = (tensor * (2 * stds + epsilon)) + means
+    # Clamp to a reasonable range (e.g., mean ± 3*std) and scale to [0, vocab_size-1]
+    min_val = (means - 3 * stds).min()
+    max_val = (means + 3 * stds).max()
+    scaled = ((denormed - min_val) / (max_val - min_val)) * (vocab_size - 1)
+    return scaled.clamp(0, vocab_size - 1).long()
+
 def save_sample_masks(predicted_masks, original_masks, epoch, batch_idx):
-    predicted_masks = predicted_masks.squeeze().cpu().numpy()
-    original_masks = original_masks.squeeze().cpu().numpy()
+    # predicted_masks: [batch, mask_len, vocab_size]
+    # original_masks: [batch, mask_len]
+    predicted_classes = torch.argmax(predicted_masks, dim=-1).cpu().numpy()  # [batch, mask_len]
+    original_masks = original_masks.cpu().numpy()  # [batch, mask_len]
+
+    # Ensure 2D shape (if batch_size=1, reshape to [1, mask_len])
+    if predicted_classes.ndim == 1:
+        predicted_classes = predicted_classes.reshape(1, -1)  # [1, mask_len]
+    if original_masks.ndim == 1:
+        original_masks = original_masks.reshape(1, -1)  # [1, mask_len]
 
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
     plt.imshow(original_masks, cmap='viridis', aspect='auto')
-    plt.title("Original Mask")
+    plt.title("Original Mask Classes")
     plt.colorbar()
 
     plt.subplot(1, 2, 2)
-    plt.imshow(predicted_masks, cmap='viridis', aspect='auto')
-    plt.title("Predicted Mask")
+    plt.imshow(predicted_classes, cmap='viridis', aspect='auto')
+    plt.title("Predicted Mask Classes")
     plt.colorbar()
 
     sample_image_path = f"mask_comparison_epoch_{epoch+1}_batch_{batch_idx}.png"
@@ -100,14 +123,14 @@ def log_gradients_and_params(model, epoch):
             grad_norm = param.grad.norm(2).item()
             grad_norms[f"grad_norm/{name}"] = grad_norm
             param_norms[f"param_norm/{name}"] = param.norm(2).item()
-    
+
     wandb.log(grad_norms, commit=False)
     wandb.log(param_norms, commit=False)
 
     avg_grad_norm = np.mean(list(grad_norms.values()))
     max_grad_norm = np.max(list(grad_norms.values()))
     avg_param_norm = np.mean(list(param_norms.values()))
-    
+
     wandb.log({
         "avg_grad_norm": avg_grad_norm,
         "max_grad_norm": max_grad_norm,
@@ -125,26 +148,28 @@ def train():
         all_predicted_masks = []
         all_original_masks = []
 
-        all_predicted_masks = []
-        all_original_masks = []
-        
         with tqdm(dataloader, desc=f"Epoch {epoch+1}/{EPOCHS}", unit="batch") as pbar:
             for batch_idx, (masked_intervals, original_masks) in enumerate(pbar):
                 masked_intervals, original_masks = masked_intervals.to(DEVICE), original_masks.to(DEVICE)
 
                 # Forward pass
-                outputs = model(masked_intervals)
+                outputs = model(masked_intervals)  # [batch, seq_len, vocab_size]
                 mask_start = (outputs.shape[1] - original_masks.shape[1]) // 2
                 mask_end = mask_start + original_masks.shape[1]
-                predicted_masks = outputs[:, mask_start:mask_end, :].float()
-                original_masks = original_masks.float()
+                predicted_masks = outputs[:, mask_start:mask_end, :]  # [batch, mask_len, vocab_size]
+
+                flatten = nn.Flatten(start_dim=-2)
+
+                original_masks_flat = flatten(original_masks)
+                predicted_masks_flat = predicted_masks.view(predicted_masks.size(0), -1, predicted_masks.size(-1))
+                predicted_masks_flat = predicted_masks_flat.transpose(1, 2)
 
                 # Accumulate predictions and ground truth
                 all_predicted_masks.append(predicted_masks.detach().cpu())
                 all_original_masks.append(original_masks.detach().cpu())
 
                 # Compute loss
-                loss = criterion(predicted_masks, original_masks)
+                loss = criterion(predicted_masks_flat, original_masks_flat)
                 total_loss += loss.item()
 
                 # Backward pass
@@ -171,7 +196,7 @@ def train():
         # Step the scheduler based on average loss
         scheduler.step(avg_loss)
 
-        # Log per-epoch metrics to W&B (without mask stats yet)
+        # Log per-epoch metrics to W&B
         wandb.log({
             "train_loss": avg_loss,
             "learning_rate": optimizer.param_groups[0]['lr'],
@@ -188,36 +213,26 @@ def train():
             torch.save(model.state_dict(), checkpoint_path)
 
         # After training, concatenate all accumulated masks
-        all_predicted_masks = torch.cat(all_predicted_masks, dim=0)
-        all_original_masks = torch.cat(all_original_masks, dim=0)
-
-        # Calculate statistics for all predicted and original masks
-        output_mean = all_predicted_masks.mean().item()
-        output_std = all_predicted_masks.std().item()
-        expected_mean = all_original_masks.mean().item()
-        expected_std = all_original_masks.std().item()
+        all_predicted_masks = torch.cat(all_predicted_masks, dim=0)  # [total_samples, mask_len, vocab_size]
+        all_original_masks = torch.cat(all_original_masks, dim=0)    # [total_samples, mask_len, 4]
 
         # Log the final aggregated stats to W&B
         wandb.log({
-            "output_mean": output_mean,
-            "output_std": output_std,
-            "expected_mean": expected_mean,
-            "expected_std": expected_std,
+            "epoch": epoch + 1
         })
 
         if (epoch % 5 == 0):
-
             # Randomly select a batch from the accumulated masks
             num_samples = all_predicted_masks.shape[0]
             random_batch_idx = random.randint(0, num_samples // BATCH_SIZE - 1)
             batch_start = random_batch_idx * BATCH_SIZE
             batch_end = batch_start + BATCH_SIZE
 
-            random_predicted_masks = all_predicted_masks[batch_start:batch_end]
-            random_original_masks = all_original_masks[batch_start:batch_end]
+            random_predicted_masks = all_predicted_masks[batch_start:batch_end]  # [batch, mask_len, vocab_size]
+            random_original_masks = all_original_masks[batch_start:batch_end]    # [batch, mask_len, 4]
 
-            # Save and visualize the random batch
-            save_sample_masks(random_predicted_masks, random_original_masks, epoch=EPOCHS-1, batch_idx=random_batch_idx)
+            # For visualization, take the first channel of original_masks
+            save_sample_masks(random_predicted_masks, random_original_masks[..., 0], epoch, random_batch_idx)
 
 if __name__ == "__main__":
     try:
