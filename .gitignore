@@ -11,3 +11,16 @@ mamba_models/attention/__pycache__
 .env
 data/data-processing/old_tokens
 bidirectional_mamba_epoch_*.pt
+transformer_models/toy-transformer-model/__pycache__
+transformer_models/bert/__pycache__
+transformer_models/bert/model/__pycache__
+transformer_models/toy-transformer-model/output
+mamba_models/attention/__pycache__
+mamba_models/attention/__pycache__/attention.cpython-311.pyc
+mamba_models/attention/__pycache__/encoder.cpython-311.pyc
+data/data-processing/__pycache__/
+output.wav
+wandb/
+mask_comparison_epoch*.png
+runs
+validation/__pycache__

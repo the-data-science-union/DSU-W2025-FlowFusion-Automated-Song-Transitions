@@ -2,10 +2,6 @@ import torch
 import torch.nn as nn
 import math
 
-import torch
-import torch.nn as nn
-import math
-
 class BERTEmbedding(nn.Module):
     def __init__(self, vocab_size, d_model, max_seq_length, dropout=0.1):
         super(BERTEmbedding, self).__init__()

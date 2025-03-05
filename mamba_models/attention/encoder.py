@@ -17,18 +17,22 @@ class EncoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         
     def forward(self, x, mask):
+        # Self-attention
         attn_output = self.self_attn(x, x, x, mask)
-        x = self.norm1(x + self.dropout(attn_output))
+        x = self.norm1(x + self.dropout(attn_output))  # Add & Norm
+        # Feed-forward network
         ff_output = self.feed_forward(x)
-        x = self.norm2(x + self.dropout(ff_output))
+        x = self.norm2(x + self.dropout(ff_output))  # Add & Norm
         return x
 
 class Encoder(nn.Module):
-    def __init__(self, vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout=0.1):
+    def __init__(self, vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout=0.1, device='cuda'):
         super(Encoder, self).__init__()
+        self.device = device  # Store device
         self.d_model = d_model
-        self.embed = nn.Embedding(vocab_size, d_model)
-        self.pos_encoding = self.positional_encoding(max_seq_length, d_model)
+        self.embed = nn.Embedding(vocab_size, d_model)  # Embedding layer for vocab (optional)
+        self.pos_encoding = self.positional_encoding(max_seq_length, d_model).to(device)  # Move positional encoding to device
+        self.flatten = nn.Flatten(start_dim=-2)  # Flatten the input across the channel dimension
         self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)])
         self.dropout = nn.Dropout(dropout)
         
@@ -38,12 +42,24 @@ class Encoder(nn.Module):
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pos_encoding[:, 0::2] = torch.sin(position * div_term)
         pos_encoding[:, 1::2] = torch.cos(position * div_term)
-        return pos_encoding.unsqueeze(0)
+        return pos_encoding.unsqueeze(0)  # Shape: [1, max_seq_length, d_model]
 
     def forward(self, x, mask):
-        #do we need to modify to make x = self.embed x?
-        x = self.embed(x)
+        # x is the input tensor of shape [batch_size, seq_length, channels]
+        
+        # Apply flattening to collapse the channel dimension (4 channels → one flattened vector)
+        x = self.flatten(x).to(self.device)  # Move x to the device
+
+        # Add positional encoding (Broadcast pos across batch)
+        x = self.embed(x.long()).to(self.device)  # Ensure embedding is on the same device
+        pos = self.pos_encoding[:, :x.size(1)].to(self.device)  # Get positional encoding for the current sequence length
+        pos = pos.repeat(1, 4, 1).to(self.device)  # Ensure positional encoding is on the same device
+        x += pos  # Shape: [batch_size, seq_length, channels * d_model]
+        
         x = self.dropout(x)
+
+        # Pass through the layers of EncoderLayer
         for layer in self.layers:
-            x = layer(x, mask) + x
+            x = layer(x, mask)
+        
         return x

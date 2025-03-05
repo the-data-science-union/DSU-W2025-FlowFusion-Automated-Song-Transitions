@@ -21,7 +21,6 @@ def test_music_dataset(file_path, interval_length=32, mask_length=2, sample_rate
     assert masked_intervals.shape == (batch_size, expected_interval_length, 4), "Incorrect masked interval shape"
     assert original_masks.shape == (batch_size, expected_mask_length, 4), "Incorrect original mask shape"
 
-
     # data viz
     sample_idx = 0
     visualize_sample(masked_intervals[sample_idx], original_masks[sample_idx], sample_rate)

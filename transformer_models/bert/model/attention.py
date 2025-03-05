@@ -24,10 +24,14 @@ class MultiHeadAttention(nn.Module):
         attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
         
         if mask is not None:
-            # Reshape mask to match attn_scores dimensions
-            mask = mask.unsqueeze(1).unsqueeze(2)  # Shape becomes (32, 1, 1, 15)
-            mask = mask.expand_as(attn_scores)     # Expand to (32, 12, 15, 15)
-            
+            # Ensure mask is broadcastable to [batch_size, num_heads, seq_len, seq_len]
+            if len(mask.shape) == 2:  # [batch_size, seq_len]
+                mask = mask.unsqueeze(1).unsqueeze(2)  # [batch_size, 1, 1, seq_len]
+                mask = mask.expand(-1, attn_scores.shape[1], attn_scores.shape[2], -1)  # [batch_size, num_heads, seq_len, seq_len]
+            elif len(mask.shape) == 3:  # [batch_size, 1, seq_len]
+                mask = mask.unsqueeze(1)  # [batch_size, 1, 1, seq_len]
+                mask = mask.expand(-1, attn_scores.shape[1], attn_scores.shape[2], -1)
+        
             attn_scores = attn_scores.masked_fill(mask == 0, -1e9)
         
         attn_probs = torch.softmax(attn_scores, dim=-1)
@@ -63,7 +67,6 @@ class MultiHeadAttention(nn.Module):
         Q = self.split_heads(self.W_q(Q))
         K = self.split_heads(self.W_k(K))
         V = self.split_heads(self.W_v(V))
-        
         attn_output, _ = self.scaled_dot_product_attention(Q, K, V, mask)
 
         combined_output = self.combine_heads(attn_output)
