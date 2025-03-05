@@ -160,6 +160,7 @@ def train():
                 # Compute loss (MLM only for simplicity; adjust if NSP is needed)
                 loss = criterion(predicted_masks, original_masks)
                 total_loss += loss.item()
+                predictions = torch.argmax(predicted_masks, dim=1)
 
                 # Backward pass
                 loss.backward()
@@ -171,7 +172,7 @@ def train():
                 total_grad_norm += batch_grad_norm
 
                 # Accumulate predictions
-                all_predicted_masks.append(predicted_masks.detach().cpu())
+                all_predicted_masks.append(predictions.detach().cpu())
                 all_original_masks.append(original_masks.detach().cpu())
 
                 pbar.set_postfix(loss=loss.item(), grad_norm=batch_grad_norm)
@@ -212,7 +213,7 @@ def train():
                 wandb.save(checkpoint_path)
 
         # Audio and visualization every 5 epochs
-        if (epoch + 1) % 5 == 0:
+        if (epoch) % 5 == 0:
             # Concatenate accumulated masks
             all_predicted_masks = torch.cat(all_predicted_masks, dim=0)
             all_original_masks = torch.cat(all_original_masks, dim=0)
@@ -225,17 +226,12 @@ def train():
 
             random_predicted_masks = all_predicted_masks[batch_start:batch_end]
             random_original_masks = all_original_masks[batch_start:batch_end]
-
-            # Save visualization
-            save_sample_masks(random_predicted_masks, random_original_masks, epoch, random_batch_idx)
-
+            
             # Generate and log audio
             pred_audio_path = f"runs/transformer_outputs/predicted_epoch_{epoch+1}.wav"
             orig_audio_path = f"runs/transformer_outputs/original_epoch_{epoch+1}.wav"
             os.makedirs(os.path.dirname(pred_audio_path), exist_ok=True)
-
-            pred_indices = torch.argmax(random_predicted_masks, dim=-1)
-            pred_audio_file = convert_to_wav(pred_indices, pred_audio_path)
+            pred_audio_file = convert_to_wav(random_predicted_masks, pred_audio_path)
             orig_audio_file = convert_to_wav(random_original_masks, orig_audio_path)
 
             if WANDB_LOGS:
