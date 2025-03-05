@@ -12,52 +12,33 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import random
+import torchaudio
+from encodec import EncodecModel
+from encodec.utils import convert_audio
+from .config import *
 
 load_dotenv()
 
-# Define Training Parameters
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-EPOCHS = 250
-BATCH_SIZE = 1
-LEARNING_RATE = 1e-4
-INTERVAL_LENGTH = 32
-MASK_LENGTH = 2
-SAMPLE_RATE = 50
-FILE_PATH = "/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/processed-tokens/"
-
-# Normalization statistics
-MEANS = torch.tensor([[503.2041], [503.7024], [491.2384], [511.6903]]).to(DEVICE)
-STDS = torch.tensor([[298.2757], [285.0885], [300.1053], [303.5165]]).to(DEVICE)
-EPSILON = 1e-6
-VOCAB_SIZE = 1024
+# Initialize Weights & Biases if enabled
+if WANDB_LOGS:
+    wandb.init(project="bidirectional_mamba_music", config={
+        "epochs": EPOCHS,
+        "batch_size": BATCH_SIZE,
+        "learning_rate": LEARNING_RATE,
+        "interval_length": INTERVAL_LENGTH,
+        "mask_length": MASK_LENGTH,
+        "sample_rate": SAMPLE_RATE,
+        "d_model": D_MODEL,
+        "num_layers": NUM_LAYERS,
+        "num_heads": NUM_HEADS,
+        "d_ff": D_FF,
+        "max_seq_length": MAX_SEQ_LENGTH,
+        "dropout": DROPOUT
+    })
 
 # Initialize Dataset & DataLoader
 dataset = MusicDataset(FILE_PATH, INTERVAL_LENGTH, MASK_LENGTH, SAMPLE_RATE)
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
-
-# Model Initialization
-D_MODEL = 512
-NUM_LAYERS = 4
-NUM_HEADS = 16
-D_FF = 2048
-MAX_SEQ_LENGTH = 1600
-DROPOUT = 0.2
-
-# Initialize Weights & Biases
-wandb.init(project="bidirectional_mamba_music", config={
-    "epochs": EPOCHS,
-    "batch_size": BATCH_SIZE,
-    "learning_rate": LEARNING_RATE,
-    "interval_length": INTERVAL_LENGTH,
-    "mask_length": MASK_LENGTH,
-    "sample_rate": SAMPLE_RATE,
-    "d_model": D_MODEL,
-    "num_layers": NUM_LAYERS,
-    "num_heads": NUM_HEADS,
-    "d_ff": D_FF,
-    "max_seq_length": MAX_SEQ_LENGTH,
-    "dropout": DROPOUT
-})
 
 model = BidirectionalMamba(
     vocab_size=VOCAB_SIZE, 
@@ -75,27 +56,33 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
 
-# Function to denormalize and convert to long
-def denormalize_and_to_long(tensor, means=MEANS, stds=STDS, vocab_size=VOCAB_SIZE, epsilon=EPSILON):
-    # Denormalize: normalized_value * (2 * std + epsilon) + mean
-    denormed = (tensor * (2 * stds + epsilon)) + means
-    # Clamp to a reasonable range (e.g., mean ± 3*std) and scale to [0, vocab_size-1]
-    min_val = (means - 3 * stds).min()
-    max_val = (means + 3 * stds).max()
-    scaled = ((denormed - min_val) / (max_val - min_val)) * (vocab_size - 1)
-    return scaled.clamp(0, vocab_size - 1).long()
+# Audio conversion function
+def convert_to_wav(denorm_data, output_file, device=DEVICE):
+    model = EncodecModel.encodec_model_48khz().to(device)
+    model.set_target_bandwidth(6.0)
+    
+    if denorm_data.dim() == 2:  # [T, N]
+        denorm_data = denorm_data.transpose(0, 1).unsqueeze(0)  # [1, N, T]
+    elif denorm_data.dim() == 3:  # [B, T, N]
+        denorm_data = denorm_data.transpose(1, 2)  # [B, N, T]
+    
+    denorm_data = denorm_data.long().to(device)
+    encoded_frame = (denorm_data, None)
+    with torch.no_grad():
+        decoded_audio = model.decode([encoded_frame])
+    
+    torchaudio.save(output_file, decoded_audio.squeeze(0).cpu(), sample_rate=model.sample_rate)
+    return output_file
 
+# Visualization function
 def save_sample_masks(predicted_masks, original_masks, epoch, batch_idx):
-    # predicted_masks: [batch, mask_len, vocab_size]
-    # original_masks: [batch, mask_len]
     predicted_classes = torch.argmax(predicted_masks, dim=-1).cpu().numpy()  # [batch, mask_len]
     original_masks = original_masks.cpu().numpy()  # [batch, mask_len]
 
-    # Ensure 2D shape (if batch_size=1, reshape to [1, mask_len])
     if predicted_classes.ndim == 1:
-        predicted_classes = predicted_classes.reshape(1, -1)  # [1, mask_len]
+        predicted_classes = predicted_classes.reshape(1, -1)
     if original_masks.ndim == 1:
-        original_masks = original_masks.reshape(1, -1)  # [1, mask_len]
+        original_masks = original_masks.reshape(1, -1)
 
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
@@ -109,13 +96,18 @@ def save_sample_masks(predicted_masks, original_masks, epoch, batch_idx):
     plt.colorbar()
 
     sample_image_path = f"runs/mamba_outputs/data_images/mask_comparison_epoch_{epoch+1}_batch_{batch_idx}.png"
+    os.makedirs(os.path.dirname(sample_image_path), exist_ok=True)
     plt.savefig(sample_image_path)
     plt.close()
 
-    wandb.log({"mask_comparison": wandb.Image(sample_image_path), "epoch": epoch + 1})
+    if WANDB_LOGS:
+        wandb.log({"mask_comparison": wandb.Image(sample_image_path), "epoch": epoch + 1})
 
 # Function to log gradients and parameter statistics
 def log_gradients_and_params(model, epoch):
+    if not WANDB_LOGS:
+        return
+    
     grad_norms = {}
     param_norms = {}
     for name, param in model.named_parameters():
@@ -159,7 +151,6 @@ def train():
                 predicted_masks = outputs[:, mask_start:mask_end, :]  # [batch, mask_len, vocab_size]
 
                 flatten = nn.Flatten(start_dim=-2)
-
                 original_masks_flat = flatten(original_masks)
                 predicted_masks_flat = predicted_masks.view(predicted_masks.size(0), -1, predicted_masks.size(-1))
                 predicted_masks_flat = predicted_masks_flat.transpose(1, 2)
@@ -196,13 +187,14 @@ def train():
         # Step the scheduler based on average loss
         scheduler.step(avg_loss)
 
-        # Log per-epoch metrics to W&B
-        wandb.log({
-            "train_loss": avg_loss,
-            "learning_rate": optimizer.param_groups[0]['lr'],
-            "avg_grad_norm_epoch": avg_grad_norm_epoch,
-            "epoch": epoch + 1,
-        }, commit=True)
+        # Log per-epoch metrics to W&B if enabled
+        if WANDB_LOGS:
+            wandb.log({
+                "train_loss": avg_loss,
+                "learning_rate": optimizer.param_groups[0]['lr'],
+                "avg_grad_norm_epoch": avg_grad_norm_epoch,
+                "epoch": epoch + 1,
+            }, commit=True)
 
         # Log gradients and parameter statistics
         log_gradients_and_params(model, epoch)
@@ -210,18 +202,17 @@ def train():
         # Save model every 5 epochs
         if (epoch + 1) % 5 == 0:
             checkpoint_path = f"runs/mamba_runs/bidirectional_mamba_epoch_{epoch+1}.pt"
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
             torch.save(model.state_dict(), checkpoint_path)
+            if WANDB_LOGS:
+                wandb.save(checkpoint_path)
 
-        # After training, concatenate all accumulated masks
-        all_predicted_masks = torch.cat(all_predicted_masks, dim=0)  # [total_samples, mask_len, vocab_size]
-        all_original_masks = torch.cat(all_original_masks, dim=0)    # [total_samples, mask_len, 4]
+        # Audio and visualization every 5 epochs
+        if (epoch + 1) % 5 == 0:
+            # Concatenate accumulated masks
+            all_predicted_masks = torch.cat(all_predicted_masks, dim=0)  # [total_samples, mask_len, vocab_size]
+            all_original_masks = torch.cat(all_original_masks, dim=0)    # [total_samples, mask_len, 4]
 
-        # Log the final aggregated stats to W&B
-        wandb.log({
-            "epoch": epoch + 1
-        })
-
-        if (epoch % 5 == 0):
             # Randomly select a batch from the accumulated masks
             num_samples = all_predicted_masks.shape[0]
             random_batch_idx = random.randint(0, num_samples // BATCH_SIZE - 1)
@@ -234,13 +225,35 @@ def train():
             # For visualization, take the first channel of original_masks
             save_sample_masks(random_predicted_masks, random_original_masks[..., 0], epoch, random_batch_idx)
 
+            # Generate and log audio if W&B is enabled
+            if WANDB_LOGS:
+                pred_audio_path = f"runs/mamba_outputs/predicted_epoch_{epoch+1}.wav"
+                orig_audio_path = f"runs/mamba_outputs/original_epoch_{epoch+1}.wav"
+                os.makedirs(os.path.dirname(pred_audio_path), exist_ok=True)
+
+                pred_indices = torch.argmax(random_predicted_masks, dim=-1)
+                pred_audio_file = convert_to_wav(pred_indices, pred_audio_path)
+                orig_audio_file = convert_to_wav(random_original_masks[..., 0], orig_audio_path)  # Using first channel
+
+                wandb.log({
+                    "predicted_audio": wandb.Audio(pred_audio_file, caption=f"Predicted Audio Epoch {epoch+1}", sample_rate=48000),
+                    "original_audio": wandb.Audio(orig_audio_file, caption=f"Original Audio Epoch {epoch+1}", sample_rate=48000),
+                    "epoch": epoch + 1
+                })
+
 if __name__ == "__main__":
     try:
         train()
     except KeyboardInterrupt:
-        print("Training interrupted by user. Closing W&B session...")
+        print("Training interrupted by user.")
+        if WANDB_LOGS:
+            print("Closing W&B session...")
+            wandb.finish()
     except Exception as e:
         print(f"An error occurred: {e}")
+        if WANDB_LOGS:
+            wandb.finish()
     finally:
-        wandb.finish()
+        if WANDB_LOGS:
+            wandb.finish()
         sys.exit(0)
