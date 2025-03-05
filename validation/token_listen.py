@@ -45,7 +45,7 @@ def convert_to_wav(denorm_data, output_file, device=DEVICE):  # Add device param
     torchaudio.save(output_file, decoded_audio.squeeze(0).cpu(), sample_rate=model.sample_rate)
     print(f"Saved WAV file: {output_file}")
 
-def test_model(model_path, data_path, device):
+def test_model(model_path, data_path, device, sample_number):
     # Initialize the model with same parameters as in training
     model = BidirectionalMamba(
         vocab_size=VOCAB_SIZE,
@@ -71,7 +71,7 @@ def test_model(model_path, data_path, device):
     )
     
     # Get the first item from the dataset
-    masked_intervals, original_masks = test_dataset[200]
+    masked_intervals, original_masks = test_dataset[sample_number]
     
     # Add batch dimension since we're processing single item
     masked_intervals = masked_intervals.unsqueeze(0).to(device)
@@ -106,7 +106,7 @@ def test_model(model_path, data_path, device):
 
 def main():
     # Define paths
-    model_path = "/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/bidirectional_mamba_epoch_145.pt"
+    model_path = "/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/bidirectional_mamba_epoch_250.pt"
     data_path = FILE_PATH
     
     # Check if model file exists
@@ -117,7 +117,7 @@ def main():
         raise ValueError(f"Data path not found at: {data_path}")
     
     # Run test
-    predicted_masks, original_masks = test_model(model_path, data_path, DEVICE)
+    predicted_masks, original_masks = test_model(model_path, data_path, DEVICE, 500)
 
     convert_to_wav(predicted_masks, "sample_prediction.wav")
     convert_to_wav(original_masks, "original_mask.wav")

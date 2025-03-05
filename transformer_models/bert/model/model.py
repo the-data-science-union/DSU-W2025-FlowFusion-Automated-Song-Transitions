@@ -6,39 +6,73 @@ from .bert_heads import BERTPreTrainingHeads
 from .. import config
 
 class BERT_model(nn.Module):
-    def __init__(self, vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout=0.1):
+    def __init__(self, vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout=0.1, device="cpu"):
         super(BERT_model, self).__init__()
-        self.pos_encoding = self.positional_encoding(max_seq_length, d_model)  # Position Embedding
-        self.encoder = Encoder(vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout)
+        self.token_embedding = nn.Embedding(vocab_size, d_model)
+        self.segment_embedding = nn.Embedding(2, d_model)
+        self.pos_encoding = self.positional_encoding(max_seq_length, d_model).to(device)
+        
+        self.encoder = Encoder(d_model, num_layers, num_heads, d_ff, dropout, device)
         self.pooler = nn.Linear(d_model, d_model)
         self.pooler_activation = nn.Tanh()
         self.pre_training_heads = BERTPreTrainingHeads(d_model, vocab_size)
+        self.final = nn.Linear(d_model, vocab_size)
         self.vocab_size = vocab_size
+        self.device = device
+        self.max_seq_length = max_seq_length
+        self.dropout = nn.Dropout(dropout)
         self.to(config.DEVICE)
 
-    def forward(self, input_ids, segment_ids, attention_mask):
-        # Ensure input_ids, segment_ids, and attention_mask are Long tensors
-        input_ids = input_ids.long()
-        segment_ids = segment_ids.float()  # segment_ids typically have shape (batch_size, seq_len)
-        attention_mask = attention_mask.float()  # attention_mask typically has shape (batch_size, seq_len)
-        
-        # Position embeddings
-        seq_length = input_ids.size(1)
-        embedding_output = self.pos_encoding[:, :seq_length, :].to(config.DEVICE)
-        
-        sequence_output = self.encoder(embedding_output, attention_mask)
-        
-        # Apply pooling on the [CLS] token (first token) for classification tasks
-        pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0]))
-        return sequence_output, pooled_output
-
     def positional_encoding(self, max_seq_length, d_model):
-        pos_encoding = torch.zeros(1, max_seq_length, d_model)
+        pos_encoding = torch.zeros(max_seq_length, d_model)
         position = torch.arange(0, max_seq_length, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pos_encoding[0, :, 0::2] = torch.sin(position * div_term)
-        pos_encoding[0, :, 1::2] = torch.cos(position * div_term)
-        return pos_encoding
+        pos_encoding[:, 0::2] = torch.sin(position * div_term)
+        pos_encoding[:, 1::2] = torch.cos(position * div_term)
+        return pos_encoding.unsqueeze(0)  # [1, max_seq_length, d_model]
+
+    def forward(self, input_ids, segment_ids, attention_mask):
+        # Input shapes: [batch_size, seq_length, channels]
+        # e.g., [3, 1600, 4]
+        
+        input_ids = input_ids.long().to(self.device)
+        segment_ids = segment_ids.long().to(self.device)
+        if attention_mask is not None:
+            attention_mask = attention_mask.float().to(self.device)
+
+        # Validate inputs
+        assert input_ids.max() < self.vocab_size, f"input_ids max {input_ids.max()} >= vocab_size {self.vocab_size}"
+
+        # Get dimensions
+        batch_size, seq_length, channels = input_ids.shape
+        
+        # Compute embeddings
+        token_embeds = self.token_embedding(input_ids)    # [3, 1600, 4, 256]
+        token_embeds = token_embeds.view(token_embeds.size(0), -1, token_embeds.size(-1))  # [3, 6400, 256]
+        torch.cuda.empty_cache()
+        # Prepare positional encoding
+        pos_embeds = self.pos_encoding[:, :seq_length, :]  # [1, 1600, 256]
+        pos_embeds = torch.cat([pos_embeds] * 4, dim=1)  # [1, 6400, 256]
+        # Sum embeddings with proper broadcasting
+        embedding_output = token_embeds + pos_embeds
+        del token_embeds, pos_embeds
+        torch.cuda.empty_cache()
+
+        embedding_output = self.dropout(embedding_output)
+
+        # Pass through encoder
+        sequence_output = self.encoder(embedding_output, attention_mask)
+
+        # Extract CLS token (first position of first channel)
+        cls_output = sequence_output[:, 0, :]  # [batch_size, d_model]
+        # Reshape for pooler: [batch_size, d_model]
+        cls_output = cls_output.reshape(batch_size, -1)  # [3, 256]
+        pooled_output = self.pooler_activation(self.pooler(cls_output))
+        # If you want to maintain channels dimension:
+        pooled_output = pooled_output.reshape(batch_size, 1, -1)  # [3, 1, 256]s
+        sequence_output = self.final(sequence_output)
+        pooled_output = self.final(pooled_output)
+        return sequence_output, pooled_output
 
     def forward_pre_training(self, input_ids, segment_ids, attention_mask):
         sequence_output, pooled_output = self.forward(input_ids, segment_ids, attention_mask)

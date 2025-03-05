@@ -108,7 +108,7 @@ def save_sample_masks(predicted_masks, original_masks, epoch, batch_idx):
     plt.title("Predicted Mask Classes")
     plt.colorbar()
 
-    sample_image_path = f"mask_comparison_epoch_{epoch+1}_batch_{batch_idx}.png"
+    sample_image_path = f"runs/mamba_outputs/data_images/mask_comparison_epoch_{epoch+1}_batch_{batch_idx}.png"
     plt.savefig(sample_image_path)
     plt.close()
 
@@ -209,7 +209,7 @@ def train():
 
         # Save model every 5 epochs
         if (epoch + 1) % 5 == 0:
-            checkpoint_path = f"bidirectional_mamba_epoch_{epoch+1}.pt"
+            checkpoint_path = f"runs/mamba_runs/bidirectional_mamba_epoch_{epoch+1}.pt"
             torch.save(model.state_dict(), checkpoint_path)
 
         # After training, concatenate all accumulated masks

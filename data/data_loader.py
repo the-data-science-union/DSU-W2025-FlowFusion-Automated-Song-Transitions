@@ -11,9 +11,9 @@ class MusicDataset(Dataset):
         self.data_files = self.load_all_files(folder_path)  # List of tensors
         self.track_ranges = self.compute_track_ranges()  # Track start indices
 
-        print(f"Loaded {len(self.data_files)} tracks.")
-        for i, (start, end) in enumerate(self.track_ranges):
-            print(f"Track {i}: {start} to {end} (Length: {end - start})")
+        #print(f"Loaded {len(self.data_files)} tracks.")
+        #for i, (start, end) in enumerate(self.track_ranges):
+        #    print(f"Track {i}: {start} to {end} (Length: {end - start})")
 
     def load_all_files(self, folder_path):
         """Loads all .pt files and keeps them as a list of tensors"""
@@ -27,7 +27,7 @@ class MusicDataset(Dataset):
                     raise ValueError(f"File {file} did not load as a tensor. Got {type(tensor)}")
 
                 tensor = tensor.squeeze(0).transpose(0, 1)  # (1, 4, T) → (T, 4)
-                print("data loader tensor shape: ", tensor.shape)
+                #print("data loader tensor shape: ", tensor.shape)
                 data_files.append(tensor)
                 print(f"Loaded {file}, shape: {tensor.shape}")
 
