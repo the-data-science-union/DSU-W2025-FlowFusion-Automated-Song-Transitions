@@ -11,7 +11,7 @@ LEARNING_RATE = 1e-4
 INTERVAL_LENGTH = 32
 MASK_LENGTH = 2
 SAMPLE_RATE = 50
-FILE_PATH = "/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/processed-tokens/"
+FILE_PATH = "/Users/jacobbia/Documents/UCLA/DSU/AIDJ/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/processed-tokens"
 
 # Normalization statistics
 EPSILON = 1e-6

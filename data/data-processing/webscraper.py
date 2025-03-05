@@ -57,7 +57,7 @@ def download_audio(video_url, save_path):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': save_path + ".wav",  # Save as .wav directly
-        'ffmpeg_location': "/home/aditya/miniconda3/envs/dsu-transformer-dj/bin/ffmpeg",  # Ensure this path is correct
+        'ffmpeg_location': "/opt/miniconda3/envs/aidj/bin/ffmpeg",  # Ensure this path is correct
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'wav',  # Download as .wav directly
