@@ -1,7 +1,7 @@
 import torch
 
 # Set to False to disable W&B logging
-WANDB_LOGS = True
+WANDB_LOGS = True #true
 
 #data information
 VOCAB_SIZE = 1024
@@ -13,14 +13,14 @@ MASK_LENGTH = 2
 SAMPLE_RATE = 50
 
 #architectural params
-D_MODEL = 512
-NUM_LAYERS = 5
-NUM_HEADS = 16
-D_FF = 2048
+D_MODEL = 512 # 512
+NUM_LAYERS = 5 # 5
+NUM_HEADS = 16 #16
+D_FF = 2048 # 2048
 MAX_SEQ_LENGTH = 1600
-DROPOUT = 0.2
+DROPOUT = 0.15
 
 #hyperparams
 BATCH_SIZE = 1
-EPOCHS = 100
-LEARNING_RATE = 1e-4
+EPOCHS = 250
+LEARNING_RATE = 5e-5
