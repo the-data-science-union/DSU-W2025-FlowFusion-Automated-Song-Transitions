@@ -6,22 +6,20 @@ from .bert_heads import BERTPreTrainingHeads
 from .. import config
 
 class BERT_model(nn.Module):
-    def __init__(self, vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout=0.1, device="cpu"):
+    def __init__(self, vocab_size, d_model, num_layers, num_heads, d_ff, max_seq_length, dropout=0.1):
         super(BERT_model, self).__init__()
         self.token_embedding = nn.Embedding(vocab_size, d_model)
         self.segment_embedding = nn.Embedding(2, d_model)
-        self.pos_encoding = self.positional_encoding(max_seq_length, d_model).to(device)
+        self.pos_encoding = self.positional_encoding(max_seq_length, d_model)
         
-        self.encoder = Encoder(d_model, num_layers, num_heads, d_ff, dropout, device)
+        self.encoder = Encoder(d_model, num_layers, num_heads, d_ff, dropout)  # Removed device param
         self.pooler = nn.Linear(d_model, d_model)
         self.pooler_activation = nn.Tanh()
         self.pre_training_heads = BERTPreTrainingHeads(d_model, vocab_size)
         self.final = nn.Linear(d_model, vocab_size)
         self.vocab_size = vocab_size
-        self.device = device
         self.max_seq_length = max_seq_length
         self.dropout = nn.Dropout(dropout)
-        self.to(config.DEVICE)
 
     def positional_encoding(self, max_seq_length, d_model):
         pos_encoding = torch.zeros(max_seq_length, d_model)
@@ -34,11 +32,10 @@ class BERT_model(nn.Module):
     def forward(self, input_ids, segment_ids, attention_mask):
         # Input shapes: [batch_size, seq_length, channels]
         # e.g., [3, 1600, 4]
-        
-        input_ids = input_ids.long().to(self.device)
-        segment_ids = segment_ids.long().to(self.device)
+        input_ids = input_ids.long()  # Removed .to(self.device)
+        segment_ids = segment_ids.long()  # Removed .to(self.device)
         if attention_mask is not None:
-            attention_mask = attention_mask.float().to(self.device)
+            attention_mask = attention_mask.float()  # Removed .to(self.device)
 
         # Validate inputs
         assert input_ids.max() < self.vocab_size, f"input_ids max {input_ids.max()} >= vocab_size {self.vocab_size}"
@@ -52,7 +49,7 @@ class BERT_model(nn.Module):
         torch.cuda.empty_cache()
         # Prepare positional encoding
         pos_embeds = self.pos_encoding[:, :seq_length, :]  # [1, 1600, 256]
-        pos_embeds = torch.cat([pos_embeds] * 4, dim=1)  # [1, 6400, 256]
+        pos_embeds = torch.cat([pos_embeds] * 4, dim=1).to(input_ids.device)  # [1, 6400, 256], dynamic device
         # Sum embeddings with proper broadcasting
         embedding_output = token_embeds + pos_embeds
         del token_embeds, pos_embeds
@@ -69,7 +66,7 @@ class BERT_model(nn.Module):
         cls_output = cls_output.reshape(batch_size, -1)  # [3, 256]
         pooled_output = self.pooler_activation(self.pooler(cls_output))
         # If you want to maintain channels dimension:
-        pooled_output = pooled_output.reshape(batch_size, 1, -1)  # [3, 1, 256]s
+        pooled_output = pooled_output.reshape(batch_size, 1, -1)  # [3, 1, 256]
         sequence_output = self.final(sequence_output)
         pooled_output = self.final(pooled_output)
         return sequence_output, pooled_output

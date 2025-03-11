@@ -5,7 +5,7 @@ import numpy as np
 
 from data_loader import MusicDataset
 
-def test_music_dataset(file_path, interval_length=32, mask_length=2, sample_rate=50, batch_size=4):
+def test_music_dataset(file_path, interval_length=32, mask_length=2, sample_rate=25, batch_size=1):
     dataset = MusicDataset(file_path, interval_length, mask_length, sample_rate)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
