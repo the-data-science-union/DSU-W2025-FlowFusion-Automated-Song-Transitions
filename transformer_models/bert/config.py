@@ -7,7 +7,7 @@ WANDB_LOGS = True #true
 VOCAB_SIZE = 1024
 AUDIO_CHANNELS = 4
 DATA_PATH = "/home/aditya/DSU-W2025-FlowFusion-Automated-Song-Transitions/data/processed-tokens/"
-DEVICE = "cuda:2" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 INTERVAL_LENGTH = 32
 MASK_LENGTH = 2
 SAMPLE_RATE = 50
@@ -21,6 +21,6 @@ MAX_SEQ_LENGTH = 1600
 DROPOUT = 0.15
 
 #hyperparams
-BATCH_SIZE = 1
-EPOCHS = 250
+BATCH_SIZE = 2
+EPOCHS = 1000
 LEARNING_RATE = 5e-5

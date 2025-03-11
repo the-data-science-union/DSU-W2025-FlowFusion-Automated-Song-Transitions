@@ -23,18 +23,17 @@ class EncoderLayer(nn.Module):
         return x
 
 class Encoder(nn.Module):
-    def __init__(self, d_model, num_layers, num_heads, d_ff, dropout=0.1, device='cuda'):
+    def __init__(self, d_model, num_layers, num_heads, d_ff, dropout=0.1):
         super(Encoder, self).__init__()
-        self.device = device
         self.d_model = d_model
         self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout) for _ in range(num_layers)])
         
     def forward(self, x, mask):
         # Input x is precomputed embeddings (e.g., [3, 1600, 4, 256])
-        x = x.to(self.device)  # Ensure input is on the correct device
+        x = x
         
         # Pass through transformer layers
         for layer in self.layers:
             x = layer(x, mask)
-        
+
         return x  # Output shape should match input shape (e.g., [3, 1600, 4, 256])
